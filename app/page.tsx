@@ -145,14 +145,19 @@ export default function URLParamEditor() {
   }
 
   const addParam = () => {
-    setParams((prev) => [
-      ...prev,
-      {
-        id: generateId(),
-        key: "",
-        value: "",
-      },
-    ])
+    const newParam = {
+      id: generateId(),
+      key: "",
+      value: "",
+    }
+
+    // Insert before any fragments
+    const fragmentIndex = params.findIndex((p) => p.key === "#fragment")
+    if (fragmentIndex !== -1) {
+      setParams((prev) => [...prev.slice(0, fragmentIndex), newParam, ...prev.slice(fragmentIndex)])
+    } else {
+      setParams((prev) => [...prev, newParam])
+    }
   }
 
   const addUtmFields = () => {
@@ -172,7 +177,13 @@ export default function URLParamEditor() {
         ...field,
       }))
 
-    setParams((prev) => [...prev, ...newParams])
+    // Insert before any fragments
+    const fragmentIndex = params.findIndex((p) => p.key === "#fragment")
+    if (fragmentIndex !== -1) {
+      setParams((prev) => [...prev.slice(0, fragmentIndex), ...newParams, ...prev.slice(fragmentIndex)])
+    } else {
+      setParams((prev) => [...prev, ...newParams])
+    }
   }
 
   const buildUrl = () => {
@@ -302,6 +313,13 @@ export default function URLParamEditor() {
 
   const finalUrl = buildUrl()
 
+  // Sort params so fragments are always last
+  const sortedParams = [...params].sort((a, b) => {
+    if (a.key === "#fragment" && b.key !== "#fragment") return 1
+    if (a.key !== "#fragment" && b.key === "#fragment") return -1
+    return 0
+  })
+
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -352,53 +370,83 @@ export default function URLParamEditor() {
             <CardDescription>Edit existing parameters or add new ones</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {params.length === 0 ? (
+            {sortedParams.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 No parameters found. Add some below or paste a URL with parameters above.
               </div>
             ) : (
               <div className="space-y-3">
-                {params.map((param, index) => (
-                  <div key={param.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    <Badge variant="outline" className="text-xs font-mono">
-                      {param.key === "#fragment" ? "#" : index === 0 ? "?" : "&"}
-                    </Badge>
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <Label htmlFor={`key-${param.id}`} className="sr-only">
-                          Parameter Key
-                        </Label>
-                        <Input
-                          id={`key-${param.id}`}
-                          placeholder="Parameter key"
-                          value={param.key}
-                          onChange={(e) => updateParam(param.id, "key", e.target.value)}
-                        />
+                {sortedParams.map((param, index) => {
+                  // Calculate the actual query parameter index (excluding fragments)
+                  const queryParams = sortedParams.filter((p) => p.key !== "#fragment")
+                  const queryParamIndex = queryParams.findIndex((p) => p.id === param.id)
+
+                  return (
+                    <div key={param.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                      <Badge variant="outline" className="text-xs font-mono">
+                        {param.key === "#fragment" ? "#" : queryParamIndex === 0 ? "?" : "&"}
+                      </Badge>
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {param.key === "#fragment" ? (
+                          // Fragment only needs a value input, no key
+                          <>
+                            <div className="flex items-center">
+                              <span className="text-sm font-medium text-gray-700">Fragment</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Label htmlFor={`value-${param.id}`} className="sr-only">
+                                Fragment Value
+                              </Label>
+                              <Input
+                                id={`value-${param.id}`}
+                                placeholder="section-name"
+                                value={param.value}
+                                onChange={(e) => updateParam(param.id, "value", e.target.value)}
+                                className="flex-1"
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          // Regular parameters have key and value
+                          <>
+                            <div>
+                              <Label htmlFor={`key-${param.id}`} className="sr-only">
+                                Parameter Key
+                              </Label>
+                              <Input
+                                id={`key-${param.id}`}
+                                placeholder="Parameter key"
+                                value={param.key}
+                                onChange={(e) => updateParam(param.id, "key", e.target.value)}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400">=</span>
+                              <Label htmlFor={`value-${param.id}`} className="sr-only">
+                                Parameter Value
+                              </Label>
+                              <Input
+                                id={`value-${param.id}`}
+                                placeholder="Parameter value"
+                                value={param.value}
+                                onChange={(e) => updateParam(param.id, "value", e.target.value)}
+                                className="flex-1"
+                              />
+                            </div>
+                          </>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-400">=</span>
-                        <Label htmlFor={`value-${param.id}`} className="sr-only">
-                          Parameter Value
-                        </Label>
-                        <Input
-                          id={`value-${param.id}`}
-                          placeholder="Parameter value"
-                          value={param.value}
-                          onChange={(e) => updateParam(param.id, "value", e.target.value)}
-                          className="flex-1"
-                        />
-                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => removeParam(param.id)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => removeParam(param.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
@@ -413,14 +461,14 @@ export default function URLParamEditor() {
               </Button>
               <Button
                 onClick={() => {
-                  const hasFragment = params.some((p) => p.key === "#fragment")
+                  const hasFragment = sortedParams.some((p) => p.key === "#fragment")
                   if (!hasFragment) {
                     setParams((prev) => [...prev, { id: generateId(), key: "#fragment", value: "" }])
                   }
                 }}
                 variant="outline"
                 className="flex items-center gap-2 bg-transparent"
-                disabled={params.some((p) => p.key === "#fragment")}
+                disabled={sortedParams.some((p) => p.key === "#fragment")}
               >
                 <Plus className="h-4 w-4" />
                 Add Fragment
